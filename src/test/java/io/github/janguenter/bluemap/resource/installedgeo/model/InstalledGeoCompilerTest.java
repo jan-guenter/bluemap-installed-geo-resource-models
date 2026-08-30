@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 class InstalledGeoCompilerTest {
 
@@ -637,10 +638,10 @@ class InstalledGeoCompilerTest {
         return compile(bytes(raw), contract);
     }
 
-    private static void assertRejected(String message, Runnable compilation) {
+    private static void assertRejected(String message, Executable compilation) {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                compilation::run
+                compilation
         );
         assertEquals(message, exception.getMessage());
     }

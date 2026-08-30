@@ -17,8 +17,10 @@ mesh emission in consumers.
 ## Dependency and packaging contract
 
 Production code uses Java 21 and Gson 2.8.9. Gson is compile-only because every
-consumer already supplies it through BlueMap's runtime. The publication POM
-and Gradle metadata intentionally declare no dependencies.
+consumer already supplies it through BlueMap's runtime. Consumers must still
+pin Gson 2.8.9 directly on their compile classpath instead of relying on an
+incidental transitive dependency. The publication POM and Gradle metadata
+intentionally declare no dependencies.
 
 Consumers pin this repository as a Git submodule and compile its production
 sources into their add-on JAR. The standalone module JAR is not a server

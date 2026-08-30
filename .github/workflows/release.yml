@@ -151,13 +151,32 @@ jobs:
         with:
           subject-path: release/*
 
+      - name: Check for an exact existing Maven package
+        id: maven-package
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          state="$(tools/check_maven_publication.sh \
+            allow-absent "${VERSION}" release)"
+          echo "state=${state}" >> "${GITHUB_OUTPUT}"
+
       - name: Publish Maven package
+        if: steps.maven-package.outputs.state == 'absent'
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
           gradle --no-daemon
           publishInstalledGeoPublicationToGitHubPackagesRepository
+
+      - name: Verify exact Maven package
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          tools/check_maven_publication.sh
+          require-present "${VERSION}" release
 
       - name: Verify assets and publish release
         env:

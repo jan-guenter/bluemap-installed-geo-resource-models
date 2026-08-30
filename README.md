@@ -33,7 +33,9 @@ contracts, poses, fallback policy, and final mesh emission.
 
 Production source uses Gson 2.8.9 and the Java 21 standard library. Gson stays
 compile-only in this review module and is not listed in publication metadata.
-There is no BlueMap, Minecraft, NeoForge, or mod dependency.
+Consumers compiling these sources must pin Gson 2.8.9 directly as
+`compileOnly`; they must not rely on a transitive build dependency. There is no
+BlueMap, Minecraft, NeoForge, or mod dependency.
 
 ## Build
 
