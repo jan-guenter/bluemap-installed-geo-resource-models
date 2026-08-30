@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        gradle: ['9.4.0', '9.6.1']
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up exact Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21.0.12+8.0.LTS'
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Set up Gradle ${{ matrix.gradle }}
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          gradle-version: ${{ matrix.gradle }}
+          cache-read-only: true
+
+      - name: Build first copy
+        run: |
+          gradle --no-daemon clean check verifyPublication
+          python3 tools/stage_release.py "${RUNNER_TEMP}/first"
+
+      - name: Rebuild and compare every publication byte
+        run: |
+          gradle --no-daemon clean check verifyPublication
+          python3 tools/stage_release.py "${RUNNER_TEMP}/second"
+          diff -qr "${RUNNER_TEMP}/first" "${RUNNER_TEMP}/second"
+          for artifact in "${RUNNER_TEMP}/first"/*; do
+            cmp "${artifact}" "${RUNNER_TEMP}/second/$(basename "${artifact}")"
+          done
+
+      - name: Upload review publication
+        if: matrix.gradle == '9.6.1'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bluemap-installed-geo-resource-models-${{ github.sha }}
+          path: ${{ runner.temp }}/second/*
+          if-no-files-found: error
+          retention-days: 14

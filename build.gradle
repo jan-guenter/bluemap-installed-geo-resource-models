@@ -1,0 +1,317 @@
+// SPDX-License-Identifier: MIT
+
+import groovy.json.JsonSlurper
+import groovy.xml.XmlSlurper
+import org.gradle.api.file.CopySpec
+
+plugins {
+    id 'java-library'
+    id 'checkstyle'
+    id 'maven-publish'
+}
+
+group = module_group
+version = module_version
+
+base {
+    archivesName = artifact_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
+}
+
+dependencies {
+    compileOnly "com.google.code.gson:gson:${gson_version}"
+
+    testImplementation "com.google.code.gson:gson:${gson_version}"
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+    options.compilerArgs.addAll(['-Xlint:all', '-Werror'])
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+checkstyle {
+    toolVersion = '10.18.2'
+    configFile = file('config/checkstyle/checkstyle.xml')
+}
+
+tasks.withType(Checkstyle).configureEach {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+def archiveMetadata = { CopySpec spec ->
+    spec.from('LICENSE') {
+        into 'META-INF'
+        rename { 'LICENSE-bluemap-installed-geo-resource-models' }
+    }
+    spec.from('NOTICE.md') {
+        into 'META-INF'
+        rename { 'NOTICE-bluemap-installed-geo-resource-models.md' }
+    }
+    spec.from('THIRD_PARTY.md') {
+        into 'META-INF'
+        rename { 'THIRD_PARTY-bluemap-installed-geo-resource-models.md' }
+    }
+    spec.from('provenance/origins.json') {
+        into 'META-INF/bluemap-installed-geo-resource-models'
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    includeEmptyDirs = false
+    manifest {
+        attributes(
+                'Implementation-Title': 'BlueMap Installed GEO Resource Models',
+                'Implementation-Version': project.version.toString()
+        )
+    }
+    archiveMetadata(delegate)
+}
+
+tasks.named('sourcesJar', Jar).configure {
+    includeEmptyDirs = false
+    archiveMetadata(delegate)
+}
+
+def binaryJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+def sourceJar = tasks.named('sourcesJar', Jar).flatMap { it.archiveFile }
+def digest = { File input ->
+    java.security.MessageDigest.getInstance('SHA-256')
+            .digest(input.bytes).encodeHex().toString()
+}
+
+tasks.register('verifyOriginSources') {
+    inputs.files(
+            fileTree('src/main/java'),
+            fileTree('provenance/oracles'),
+            'provenance/origins.json'
+    )
+    doLast {
+        def provenance = new JsonSlurper().parse(file('provenance/origins.json'))
+        if (provenance.component != artifact_id
+                || provenance.version != project.version.toString()) {
+            throw new GradleException('Origin manifest identity mismatch')
+        }
+
+        provenance.oracle_sources.each { source ->
+            if (digest(file(source.path)) != source.sha256) {
+                throw new GradleException("Frozen origin mismatch: ${source.path}")
+            }
+        }
+        provenance.production_sources.each { source ->
+            if (digest(file(source.path)) != source.sha256) {
+                throw new GradleException("Production origin lock mismatch: ${source.path}")
+            }
+        }
+
+        def expectedProduction = provenance.production_sources*.path.toSet()
+        def actualProduction = fileTree('src/main/java') {
+            include '**/*.java'
+        }.files.collect { project.relativePath(it) }.toSet()
+        if (actualProduction != expectedProduction) {
+            throw new GradleException("Production source boundary mismatch: ${actualProduction}")
+        }
+
+        def productionText = actualProduction.collect { file(it).getText('UTF-8') }.join('\n')
+        [
+                'de.bluecolored.',
+                'net.minecraft.',
+                'net.neoforged.',
+                'software.bernie.',
+                'io.github.janguenter.bluemap.ars'
+        ].each { forbidden ->
+            if (productionText.contains(forbidden)) {
+                throw new GradleException("Forbidden production coupling: ${forbidden}")
+            }
+        }
+    }
+}
+
+tasks.register('verifyInstalledGeoJar') {
+    dependsOn tasks.named('jar')
+    inputs.file(binaryJar)
+    doLast {
+        def packageRoot =
+                'io/github/janguenter/bluemap/resource/installedgeo/model/'
+        def expected = [
+                'META-INF/MANIFEST.MF',
+                'META-INF/LICENSE-bluemap-installed-geo-resource-models',
+                'META-INF/NOTICE-bluemap-installed-geo-resource-models.md',
+                'META-INF/THIRD_PARTY-bluemap-installed-geo-resource-models.md',
+                'META-INF/bluemap-installed-geo-resource-models/origins.json',
+                packageRoot + 'InstalledGeoCompiler.class',
+                packageRoot + 'InstalledGeoCompiler$Axis.class',
+                packageRoot + 'InstalledGeoCompiler$Contract.class',
+                packageRoot + 'InstalledGeoCompiler$Face.class',
+                packageRoot + 'InstalledGeoCompiler$RawBone.class',
+                packageRoot + 'InstalledGeoCompiler$RawCube.class',
+                packageRoot + 'InstalledGeoCompiler$UvRect.class',
+                packageRoot + 'InstalledGeoCompiler$VertexSet.class',
+                packageRoot + 'InstalledGeoModel.class',
+                packageRoot + 'InstalledGeoModel$Quad.class',
+                packageRoot + 'InstalledGeoModel$Vec3.class',
+                packageRoot + 'InstalledGeoModel$Vertex.class',
+                packageRoot + 'InstalledGeoPose.class',
+                packageRoot + 'InstalledGeoPose$BoneTransform.class'
+        ] as Set
+        def zip = new java.util.zip.ZipFile(inputs.files.singleFile)
+        try {
+            def entries = zip.entries().findAll { !it.directory }.collect { it.name }
+            if (entries.toSet().size() != entries.size() || entries.toSet() != expected) {
+                throw new GradleException("Installed GEO JAR boundary mismatch: ${entries}")
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.register('verifyInstalledGeoSourcesJar') {
+    dependsOn tasks.named('sourcesJar')
+    inputs.file(sourceJar)
+    doLast {
+        def packageRoot =
+                'io/github/janguenter/bluemap/resource/installedgeo/model/'
+        def expected = [
+                'META-INF/MANIFEST.MF',
+                'META-INF/LICENSE-bluemap-installed-geo-resource-models',
+                'META-INF/NOTICE-bluemap-installed-geo-resource-models.md',
+                'META-INF/THIRD_PARTY-bluemap-installed-geo-resource-models.md',
+                'META-INF/bluemap-installed-geo-resource-models/origins.json',
+                packageRoot + 'InstalledGeoCompiler.java',
+                packageRoot + 'InstalledGeoModel.java',
+                packageRoot + 'InstalledGeoPose.java'
+        ] as Set
+        def zip = new java.util.zip.ZipFile(inputs.files.singleFile)
+        try {
+            def entries = zip.entries().findAll { !it.directory }.collect { it.name }
+            if (entries.toSet().size() != entries.size() || entries.toSet() != expected) {
+                throw new GradleException(
+                        "Installed GEO sources JAR boundary mismatch: ${entries}"
+                )
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+publishing {
+    publications {
+        installedGeo(MavenPublication) {
+            from components.java
+            artifactId = artifact_id
+            pom {
+                name = 'BlueMap Installed GEO Resource Models'
+                description = 'Bounded installed Bedrock GEO models for BlueMap add-ons.'
+                url = 'https://github.com/jan-guenter/bluemap-installed-geo-resource-models'
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/license/mit'
+                        distribution = 'repo'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'jan-guenter'
+                        name = 'Jan Guenter'
+                    }
+                }
+                scm {
+                    connection = (
+                            'scm:git:https://github.com/jan-guenter/'
+                                    + 'bluemap-installed-geo-resource-models.git'
+                    )
+                    developerConnection = (
+                            'scm:git:ssh://git@github.com/jan-guenter/'
+                                    + 'bluemap-installed-geo-resource-models.git'
+                    )
+                    url = (
+                            'https://github.com/jan-guenter/'
+                                    + 'bluemap-installed-geo-resource-models'
+                    )
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = 'GitHubPackages'
+            url = uri(
+                    'https://maven.pkg.github.com/jan-guenter/'
+                            + 'bluemap-installed-geo-resource-models'
+            )
+            credentials {
+                username = System.getenv('GITHUB_ACTOR')
+                password = System.getenv('GITHUB_TOKEN')
+            }
+        }
+    }
+}
+
+tasks.register('verifyPublication') {
+    dependsOn tasks.named('generatePomFileForInstalledGeoPublication')
+    dependsOn tasks.named('generateMetadataFileForInstalledGeoPublication')
+    inputs.files(
+            layout.buildDirectory.file(
+                    'publications/installedGeo/pom-default.xml'
+            ),
+            layout.buildDirectory.file(
+                    'publications/installedGeo/module.json'
+            )
+    )
+    doLast {
+        def pom = new XmlSlurper(false, false).parse(
+                layout.buildDirectory.file(
+                        'publications/installedGeo/pom-default.xml'
+                ).get().asFile
+        )
+        if (pom.groupId.text() != project.group.toString()
+                || pom.artifactId.text() != artifact_id
+                || pom.version.text() != project.version.toString()
+                || pom.dependencies.dependency.size() != 0) {
+            throw new GradleException('POM identity or dependency boundary mismatch')
+        }
+
+        def metadata = new JsonSlurper().parse(
+                layout.buildDirectory.file(
+                        'publications/installedGeo/module.json'
+                ).get().asFile
+        )
+        if (metadata.component.group != project.group.toString()
+                || metadata.component.module != artifact_id
+                || metadata.component.version != project.version.toString()
+                || metadata.variants.any {
+                    (it.dependencies ?: []).size() != 0
+                            || (it.dependencyConstraints ?: []).size() != 0
+                }) {
+            throw new GradleException('Gradle module identity or dependency boundary mismatch')
+        }
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn tasks.named('verifyOriginSources')
+    dependsOn tasks.named('verifyInstalledGeoJar')
+    dependsOn tasks.named('verifyInstalledGeoSourcesJar')
+}
