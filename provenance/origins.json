@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "component": "bluemap-installed-geo-resource-models",
+  "version": "0.1.0-alpha.1",
+  "license": "MIT",
+  "scope": "independently authored installed Bedrock GEO parsing and mesh math",
+  "consumer_origins": [
+    {
+      "id": "ars-technica",
+      "repository": "https://github.com/jan-guenter/bluemap-ars-technica-addon",
+      "first_source_commit": "ee6f48ee167e6aaa25c79e22d7e0158bf933795c",
+      "release_source_commit": "6504417c8238feafcf2ae157823f667f5dfa14ff",
+      "current_main_with_parity_fixtures": "55279f50d2bb9a2a3da3dc460a361d5bac488330",
+      "license": "MIT",
+      "role": "canonical contract-driven parser and immutable mesh model"
+    },
+    {
+      "id": "ars-nouveau",
+      "repository": "https://github.com/jan-guenter/bluemap-ars-nouveau-addon",
+      "first_source_commit": "37943fff05b445b55a711eb8e466b2f7d312bbf0",
+      "release_source_commit": "2ac4fb605781ffc3a546d4a16e4105d4b65a06af",
+      "current_main_with_parity_fixtures": "62bcd904b678d1aa42144d638db22116d69350b9",
+      "license": "MIT",
+      "role": "independent exact static parser and mesh corroboration"
+    },
+    {
+      "id": "ars-creo",
+      "repository": "https://github.com/jan-guenter/bluemap-ars-creo-addon",
+      "first_geometry_commit": "d43305fd27680d44b8d3c61381817932c1964e68",
+      "sampled_pose_commit": "f08a06fda19876cbf6b48e9d38e59b2a63b8408c",
+      "release_source_commit": "18a48598ee42f1c441099e0ccd5aafde7b8ed0ab",
+      "current_main_with_parity_fixtures": "0bb6ef6cff2ce39314029889d893db7cc06dde27",
+      "license": "MIT",
+      "role": "sampled bone transform order and unknown-pose-bone rejection"
+    }
+  ],
+  "transformation": {
+    "compiler": "Ars Technica package and model names are neutralized, family constants are removed, and the generic pose overload applies the exact Ars Creo child-to-root rotation-then-translation order.",
+    "model": "The Ars Technica model changes only its package and class description.",
+    "pose": "Ars Creo WheelPose is renamed InstalledGeoPose, its package and model import are neutralized, and its behavior and exception text remain exact.",
+    "newly_authored_seam": "The compile(byte[], Contract, InstalledGeoPose) API and identity-pose delegation are new module composition code. Consumers still own animation parsing and sampling."
+  },
+  "oracle_sources": [
+    {
+      "consumer": "ars-technica",
+      "path": "provenance/oracles/ars-technica/InstalledGeoCompiler.java",
+      "sha256": "e1afe8d2665295243d888d3817c53f51a39eead75f1e91525bc6d2692cbb46a2"
+    },
+    {
+      "consumer": "ars-technica",
+      "path": "provenance/oracles/ars-technica/InstalledGeoModel.java",
+      "sha256": "30638224b85ac5441241ef02df78f80d30fb403fcbf2a2896d770eb121a0a7ec"
+    },
+    {
+      "consumer": "ars-nouveau",
+      "path": "provenance/oracles/ars-nouveau/InstalledGeoCompiler.java",
+      "sha256": "7a7ab70a2f745af06775240ec02d5c0aa81f485675244e575060e2de7a9c74cd"
+    },
+    {
+      "consumer": "ars-nouveau",
+      "path": "provenance/oracles/ars-nouveau/InstalledGeoModel.java",
+      "sha256": "4d136e0393a57f702d6aa860b4a9d7ec866b8523e74895cafdfff39635a5e05e"
+    },
+    {
+      "consumer": "ars-creo",
+      "path": "provenance/oracles/ars-creo/InstalledGeoCompiler.java",
+      "sha256": "569f659aa0152a8c2d44d387502cffb77bf7d4774bcf16bec9a6fa8f6bdb9657"
+    },
+    {
+      "consumer": "ars-creo",
+      "path": "provenance/oracles/ars-creo/WheelModel.java",
+      "sha256": "f5314f57245ade2c3c9cb471d3420294ab24863849583645419109b163f772d0"
+    },
+    {
+      "consumer": "ars-creo",
+      "path": "provenance/oracles/ars-creo/WheelPose.java",
+      "sha256": "9a23ea4a56a258e8ad6806b5134db2221321fb337eedd4f1d83083b75e03a1d9"
+    }
+  ],
+  "production_sources": [
+    {
+      "path": "src/main/java/io/github/janguenter/bluemap/resource/installedgeo/model/InstalledGeoCompiler.java",
+      "sha256": "e1c7647d6f84cafd2f55292896d84582a0395cbe7907f44c981cd112f21ece41",
+      "role": "parser, validation, transforms, UV mapping, ordered quad generation, and nested Contract"
+    },
+    {
+      "path": "src/main/java/io/github/janguenter/bluemap/resource/installedgeo/model/InstalledGeoModel.java",
+      "sha256": "0b05bc5d4d42011977543c54d11b44244d5a1f2588e96eb389e55618dbe799e1",
+      "role": "immutable model, quad, vertex, and Vec3"
+    },
+    {
+      "path": "src/main/java/io/github/janguenter/bluemap/resource/installedgeo/model/InstalledGeoPose.java",
+      "sha256": "f9f99affde12cb197c69964b18b5f8ba3528674cebad3e934116797b44bf1dc7",
+      "role": "identity and sampled per-bone transforms"
+    }
+  ],
+  "gson": {
+    "version": "2.8.9",
+    "jar_sha256": "d3999291855de495c94c743761b8ab5176cfeabe281a5ab0d8e8d45326fd703e",
+    "license": "Apache-2.0",
+    "use": "compile-only and tests; no Gson class is bundled"
+  },
+  "synthetic_mesh_oracle": {
+    "format": "bluemap-installed-geo-mesh-v1",
+    "base_20_36_192_sha256": "0230e47798bf74f9b94055f2ddaf757ae21bd3ce52d30f714c5078e684bf38b6",
+    "complex_static_sha256": "4e654a1b2b7d9c910d5b21b69cc2b6dc26d94598481d042a6debd8348d69cf06",
+    "complex_posed_sha256": "7a583c96dcc914027a0440ad8db1452c9a81b65fd4386f07e9df4384e5422b2c",
+    "jvm": "OpenJDK 21.0.12.1",
+    "note": "Rotated raw Math bits are rechecked on each authoritative build JVM."
+  }
+}

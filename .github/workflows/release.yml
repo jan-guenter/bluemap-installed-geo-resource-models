@@ -1,0 +1,184 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Immutable signed annotated v* tag to release or resume
+        required: true
+        type: string
+
+permissions: {}
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        gradle: ['9.4.0', '9.6.1']
+    steps:
+      - name: Check out exact tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify immutable signed release identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(sed -n 's/^module_version=//p' gradle.properties)"
+          test -n "${version}"
+          [[ "${version}" != *-SNAPSHOT ]]
+          test "${RELEASE_TAG}" = "v${version}"
+          git fetch --force --tags origin
+          tag_object="$(git rev-parse "refs/tags/${RELEASE_TAG}")"
+          test "$(git cat-file -t "${tag_object}")" = tag
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object}" \
+            --jq '.verification.verified')" = true
+          test "$(git rev-parse 'HEAD^{commit}')" = \
+            "$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main
+
+      - name: Set up exact Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21.0.12+8.0.LTS'
+
+      - name: Set up Gradle ${{ matrix.gradle }}
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          gradle-version: ${{ matrix.gradle }}
+          cache-read-only: true
+
+      - name: Run complete gate
+        run: gradle --no-daemon clean check verifyPublication
+
+  release:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Check out exact tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify immutable signed release identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(sed -n 's/^module_version=//p' gradle.properties)"
+          test -n "${version}"
+          test "${RELEASE_TAG}" = "v${version}"
+          tag_object="$(git rev-parse "refs/tags/${RELEASE_TAG}")"
+          test "$(git cat-file -t "${tag_object}")" = tag
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object}" \
+            --jq '.verification.verified')" = true
+          test "$(git rev-parse 'HEAD^{commit}')" = \
+            "$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          echo "VERSION=${version}" >> "${GITHUB_ENV}"
+
+      - name: Set up exact Java 21
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21.0.12+8.0.LTS'
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Set up Gradle 9.6.1
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          gradle-version: '9.6.1'
+          cache-read-only: true
+
+      - name: Build reproducible release files
+        run: |
+          gradle --no-daemon clean check verifyPublication
+          python3 tools/stage_release.py "${RUNNER_TEMP}/first"
+          gradle --no-daemon clean check verifyPublication
+          python3 tools/stage_release.py "${RUNNER_TEMP}/second"
+          diff -qr "${RUNNER_TEMP}/first" "${RUNNER_TEMP}/second"
+          mkdir release
+          cp "${RUNNER_TEMP}/second"/* release/
+          (cd release && sha256sum --check SHA256SUMS)
+
+      - name: Create or refresh draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            test "$(gh release view "${RELEASE_TAG}" \
+              --json isDraft --jq '.isDraft')" = true
+            gh release upload "${RELEASE_TAG}" release/* --clobber
+          else
+            gh release create "${RELEASE_TAG}" release/* \
+              --draft --generate-notes \
+              --title "BlueMap Installed GEO Resource Models ${VERSION}" \
+              --verify-tag
+          fi
+
+      - name: Attest release files
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: release/*
+
+      - name: Publish Maven package
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          gradle --no-daemon
+          publishInstalledGeoPublicationToGitHubPackagesRepository
+
+      - name: Verify assets and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          downloaded="${RUNNER_TEMP}/release-assets"
+          mkdir -p "${downloaded}"
+          gh release download "${RELEASE_TAG}" --dir "${downloaded}"
+          mapfile -t expected < <(
+            for artifact in release/*; do basename "${artifact}"; done | LC_ALL=C sort
+          )
+          mapfile -t actual < <(gh release view "${RELEASE_TAG}" \
+            --json assets --jq '.assets[].name' | LC_ALL=C sort)
+          diff -u \
+            <(printf '%s\n' "${expected[@]}") \
+            <(printf '%s\n' "${actual[@]}")
+          for artifact in release/*; do
+            cmp "${artifact}" "${downloaded}/$(basename "${artifact}")"
+          done
+          if [[ "${RELEASE_TAG}" == *-* ]]; then
+            gh release edit "${RELEASE_TAG}" --draft=false --prerelease
+          else
+            gh release edit "${RELEASE_TAG}" --draft=false --latest
+          fi
