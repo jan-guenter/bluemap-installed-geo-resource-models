@@ -74,7 +74,7 @@ public record InstalledGeoModel(List<Quad> quads) {
             return new Vec3(x * cosine - y * sine, x * sine + y * cosine, z);
         }
 
-        /** Matches the point order used by the installed GeckoLib geometry. */
+        /** Matches the rotation order used by the admitted installed GEO resources. */
         public Vec3 rotate(Vec3 degrees) {
             return rotateX(degrees.x).rotateY(degrees.y).rotateZ(degrees.z);
         }

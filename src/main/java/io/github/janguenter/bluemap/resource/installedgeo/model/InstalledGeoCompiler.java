@@ -175,12 +175,12 @@ public final class InstalledGeoCompiler {
                 continue;
             }
             Vec3[] faceVertices = vertices.forFace(face);
-            float u = (float) ((uv.u + uv.width) / textureWidth);
-            float uWidth = (float) (uv.u / textureWidth);
-            float v = (float) (uv.v / textureHeight);
-            float vHeight = (float) ((uv.v + uv.height) / textureHeight);
+            float uMax = (float) ((uv.u + uv.width) / textureWidth);
+            float uMin = (float) (uv.u / textureWidth);
+            float vMin = (float) (uv.v / textureHeight);
+            float vMax = (float) ((uv.v + uv.height) / textureHeight);
             float[][] coordinates = {
-                    {u, v}, {uWidth, v}, {uWidth, vHeight}, {u, vHeight}
+                    {uMax, vMin}, {uMin, vMin}, {uMin, vMax}, {uMax, vMax}
             };
             Vertex[] transformed = new Vertex[4];
             for (int index = 0; index < transformed.length; index++) {
