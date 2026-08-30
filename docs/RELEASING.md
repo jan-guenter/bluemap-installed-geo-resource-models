@@ -13,7 +13,7 @@ exactly `v<module_version>`.
 5. Merge the reviewed version commit and create the signed annotated tag there.
 6. Let the release workflow validate both Gradle versions, publish a draft,
    attest the exact files, publish or safely resume the Maven package, compare
-   every Maven file and release asset byte, and publish only after all checks
-   match.
+   every staged Maven publication file and release asset byte, and publish only
+   after all checks match.
 
 A module release does not authorize a consumer update or server deployment.

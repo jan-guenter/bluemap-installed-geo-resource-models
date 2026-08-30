@@ -18,7 +18,8 @@ before mesh generation.
 Consumers compile the three source files into their own add-on JAR. The
 standalone JAR, sources JAR, POM, and Gradle module metadata are review files,
 not server dependencies. They contain no descriptor, entrypoint, service,
-mod metadata, nested JAR, model, texture, JSON resource, or host class.
+mod metadata, nested JAR, model, texture, model/config/runtime JSON, or host
+class. The sole JSON resource is the first-party provenance manifest.
 
 ## Deliberate exclusions
 
