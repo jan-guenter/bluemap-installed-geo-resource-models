@@ -14,10 +14,12 @@ animation parser, BlueMap emitters, routes, and fallback policy.
 | Ars Nouveau | `62bcd904b678d1aa42144d638db22116d69350b9` | Ten-model static control |
 | Ars Creo | `0bb6ef6cff2ce39314029889d893db7cc06dde27` | Non-identity pose and fallback control |
 
-The shared synthetic geometry produces the same complete ordered-mesh
-fingerprint in all three baselines. A second hierarchy fixture locks the static
-and sampled Ars Creo transform paths. Exact algorithms and hashes are recorded
-in `provenance/origins.json`.
+The frozen consumer source oracles were independently compiled against the
+shared synthetic geometry and compared over the complete ordered mesh. The
+module suite locks the resulting digest; the consumer commits above lock count
+and first-quad parity. A second hierarchy fixture independently locks the
+static and sampled Ars Creo transform paths. Exact algorithms and hashes are
+recorded in `provenance/origins.json`.
 
 ## Migration gate
 

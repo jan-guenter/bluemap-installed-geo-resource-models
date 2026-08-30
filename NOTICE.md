@@ -9,5 +9,6 @@ histories, hashes, and transformations are recorded in
 Frozen files under `provenance/oracles` are source-origin evidence. They are
 not included in either published archive.
 
-This module distributes no mod code, model, texture, JSON, metadata, or
-binary. Gson is a compile-only and test dependency and is not bundled.
+This module distributes no mod runtime binary or source, model, texture, or
+other mod asset. Gson is a compile-only and test dependency and is not
+bundled.
